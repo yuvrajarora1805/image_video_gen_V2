@@ -1,0 +1,17 @@
+Field	Type	Null	Key	Default	Extra
+id	bigint(20) unsigned	NO	PRI	NULL	auto_increment
+taskid	int(11)	NO	MUL	NULL	
+beforeid	int(11)	YES		NULL	
+customer_id	bigint(20) unsigned	NO	MUL	NULL	
+master_video_id	bigint(20) unsigned	YES	MUL	NULL	
+user_video_id	bigint(20) unsigned	YES	MUL	NULL	
+generated_path	varchar(500)	NO		NULL	
+generated_video	varchar(255)	NO		NULL	
+thumbnail	varchar(255)	YES		NULL	
+video_type	enum('portrait','landscape')	NO		portrait	
+duration	int(11)	YES		NULL	
+file_size	bigint(20)	YES		NULL	
+sent	tinyint(1)	NO		0	
+sent_date	timestamp	YES		NULL	
+created_at	timestamp	YES		NULL	
+updated_at	timestamp	YES		NULL	

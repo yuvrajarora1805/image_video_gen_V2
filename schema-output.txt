@@ -1,0 +1,29 @@
+PHP Warning:  Module "openssl" is already loaded in Unknown on line 0
+
+Warning: Module "openssl" is already loaded in Unknown on line 0
+==============================================
+Generated Videos Table Schema
+==============================================
+
+id                        bigint(20) unsigned NOT NULL
+taskid                    int(11)         NOT NULL
+beforeid                  int(11)         NULL
+customer_id               bigint(20) unsigned NOT NULL
+master_video_id           bigint(20) unsigned NULL
+user_video_id             bigint(20) unsigned NULL
+generated_path            varchar(500)    NOT NULL
+generated_video           varchar(255)    NOT NULL
+thumbnail                 varchar(255)    NULL
+video_type                enum('portrait','landscape') NOT NULL
+duration                  int(11)         NULL
+file_size                 bigint(20)      NULL
+sent                      tinyint(1)      NOT NULL
+sent_date                 timestamp       NULL
+created_at                timestamp       NULL
+updated_at                timestamp       NULL
+
+==============================================
+Sample Data (if any):
+==============================================
+Total records: 0
+

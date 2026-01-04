@@ -1,0 +1,15 @@
+============================================================
+GTX 1650 GPU Detection Test
+============================================================
+
+Traceback (most recent call last):
+  File "D:\xamp\htdocs\imgen\public_html\public_html\test_gpu.py", line 25, in <module>
+    gpu_codec, gpu_params, use_cuda_decode = detect_gpu_encoder()
+                                             ~~~~~~~~~~~~~~~~~~^^
+  File "D:\xamp\htdocs\imgen\public_html\public_html\parallel_video_generator.py", line 40, in detect_gpu_encoder
+    print("\u26a0 FORCE_NVENC enabled - using h264_nvenc without testing")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yuvra\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u26a0' in position 0: character maps to <undefined>

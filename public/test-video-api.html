@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Generation API Tester</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        h2 { color: #555; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #0056b3; }
+        input, select {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .result {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-top: 10px;
+            border-left: 4px solid #007bff;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error { border-left-color: #dc3545; }
+        .success { border-left-color: #28a745; }
+        .video-card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background: #fff;
+        }
+        .video-card video {
+            max-width: 300px;
+            margin: 10px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background: #007bff;
+            color: white;
+        }
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge-success { background: #28a745; color: white; }
+        .badge-warning { background: #ffc107; color: black; }
+        .badge-danger { background: #dc3545; color: white; }
+    </style>
+</head>
+<body>
+    <h1>🎥 Video Generation API Tester</h1>
+
+    <!-- Step 1: Check Prerequisites -->
+    <div class="section">
+        <h2>Step 1: Check Prerequisites</h2>
+        <p>Before testing video generation, ensure these are completed:</p>
+        <ul>
+            <li>✅ Upload a video template (image) at <a href="/video-template-form" target="_blank">Video Templates</a></li>
+            <li>✅ Assign the video template to customers at <a href="/assign" target="_blank">Assign Templates</a></li>
+            <li>✅ Create a video task at <a href="/generate-video-form" target="_blank">Create Video Task</a></li>
+        </ul>
+        <button onclick="checkPrerequisites()">Check Prerequisites</button>
+        <div id="prereqResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Step 2: List All Video Tasks -->
+    <div class="section">
+        <h2>Step 2: Get All Video Tasks</h2>
+        <p>View all video generation tasks and their status.</p>
+        <button onclick="getTasks()">Get All Tasks</button>
+        <div id="tasksResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Step 3: Get Generated Videos for a Task -->
+    <div class="section">
+        <h2>Step 3: Get Generated Videos</h2>
+        <p>Enter a Task ID to retrieve all generated videos:</p>
+        <input type="number" id="taskId" placeholder="Task ID" value="1">
+        <button onclick="getGeneratedVideos()">Get Videos</button>
+        <div id="videosResult" class="result" style="display:none;"></div>
+        <div id="videosDisplay"></div>
+    </div>
+
+    <!-- Step 4: Download Videos -->
+    <div class="section">
+        <h2>Step 4: Download Videos</h2>
+        <p><strong>Download Single Video:</strong></p>
+        <input type="number" id="videoId" placeholder="Video ID">
+        <button onclick="downloadVideo()">Download Single Video</button>
+        
+        <p style="margin-top: 20px;"><strong>Download All Task Videos as ZIP:</strong></p>
+        <input type="number" id="zipTaskId" placeholder="Task ID" value="1">
+        <button onclick="downloadTaskZip()">Download All Videos (ZIP)</button>
+    </div>
+
+    <!-- API Reference -->
+    <div class="section">
+        <h2>API Reference</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Endpoint</th>
+                    <th>Method</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>/get-generated-videos/{taskId}</code></td>
+                    <td>GET</td>
+                    <td>Get all videos for a task with URLs and customer details</td>
+                </tr>
+                <tr>
+                    <td><code>/download-video/{videoId}</code></td>
+                    <td>GET</td>
+                    <td>Download a single video file</td>
+                </tr>
+                <tr>
+                    <td><code>/download-task-videos/{taskId}</code></td>
+                    <td>GET</td>
+                    <td>Download all task videos as ZIP</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        function showResult(elementId, data, isError = false) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = 'result ' + (isError ? 'error' : 'success');
+            element.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        }
+
+        async function checkPrerequisites() {
+            try {
+                const checks = [];
+                
+                // Check video templates
+                const templatesRes = await fetch('/get-generated-videos/999');
+                checks.push('✅ API is accessible');
+                
+                showResult('prereqResult', 'Prerequisites check completed!\n\n' + checks.join('\n'));
+            } catch (error) {
+                showResult('prereqResult', 'Error: ' + error.message, true);
+            }
+        }
+
+        async function getTasks() {
+            try {
+                // This would need a dedicated endpoint, for now just show instructions
+                showResult('tasksResult', 'To view tasks, go to:\nhttp://127.0.0.1:8000/generate-videos\n\nLook for tasks with status "Generated" - note the Task ID for testing.');
+            } catch (error) {
+                showResult('tasksResult', 'Error: ' + error.message, true);
+            }
+        }
+
+        async function getGeneratedVideos() {
+            const taskId = document.getElementById('taskId').value;
+            if (!taskId) {
+                alert('Please enter a Task ID');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/get-generated-videos/${taskId}`);
+                const data = await response.json();
+                
+                showResult('videosResult', data);
+                
+                // Display videos nicely
+                if (data.success && data.videos && data.videos.length > 0) {
+                    displayVideos(data.videos);
+                } else {
+                    document.getElementById('videosDisplay').innerHTML = '<p>No videos found for this task.</p>';
+                }
+            } catch (error) {
+                showResult('videosResult', 'Error: ' + error.message, true);
+            }
+        }
+
+        function displayVideos(videos) {
+            const container = document.getElementById('videosDisplay');
+            container.innerHTML = '<h3>Generated Videos:</h3>';
+            
+            videos.forEach((video, index) => {
+                const card = document.createElement('div');
+                card.className = 'video-card';
+                card.innerHTML = `
+                    <h4>Video #${index + 1}: ${video.customer_name}</h4>
+                    <p><strong>Email:</strong> ${video.customer_email || 'N/A'}</p>
+                    <p><strong>Mobile:</strong> ${video.customer_mobile || 'N/A'}</p>
+                    <p><strong>Type:</strong> ${video.video_type} | <strong>Size:</strong> ${video.file_size}</p>
+                    <p><strong>Status:</strong> ${video.sent ? '<span class="badge badge-success">Sent</span>' : '<span class="badge badge-warning">Pending</span>'}</p>
+                    <video controls src="${video.video_url}"></video>
+                    <br>
+                    <button onclick="window.open('/download-video/${video.id}', '_blank')">Download This Video</button>
+                    <button onclick="copyToClipboard('${video.video_url}')">Copy Video URL</button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function downloadVideo() {
+            const videoId = document.getElementById('videoId').value;
+            if (!videoId) {
+                alert('Please enter a Video ID');
+                return;
+            }
+            window.open(`/download-video/${videoId}`, '_blank');
+        }
+
+        function downloadTaskZip() {
+            const taskId = document.getElementById('zipTaskId').value;
+            if (!taskId) {
+                alert('Please enter a Task ID');
+                return;
+            }
+            window.open(`/download-task-videos/${taskId}`, '_blank');
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('URL copied to clipboard!');
+            });
+        }
+    </script>
+</body>
+</html>

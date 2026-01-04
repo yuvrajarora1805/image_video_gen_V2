@@ -1,0 +1,70 @@
+PHP Warning:  Module "openssl" is already loaded in Unknown on line 0
+
+Warning: Module "openssl" is already loaded in Unknown on line 0
+==============================================
+Video Generation Test Script
+==============================================
+
+Fetching data for Task ID: 20
+
+Background Video File: bg_video_1765744306.mp4
+Master Template ID: 1
+
+Found 1 customer template(s)
+
+Testing with first customer template:
+  Customer ID: 2
+  Template File: user_template_1765743912_693f1d288d5fd.png
+
+==============================================
+File Paths:
+==============================================
+Background Video: D:\xamp\htdocs\imgen\public_html\public_html\public\videos/background_video/bg_video_1765744306.mp4
+Template Image:   D:\xamp\htdocs\imgen\public_html\public_html\public\img/user_template/user_template_1765743912_693f1d288d5fd.png
+Output Video:     D:\xamp\htdocs\imgen\public_html\public_html\public\videos/generated_video/test_output_1765747329.mp4
+
+==============================================
+File Existence Check:
+==============================================
+Background Video: Γ£ô EXISTS
+Template Image:   Γ£ô EXISTS
+
+==============================================
+Python Command:
+==============================================
+python "D:\xamp\htdocs\imgen\public_html\public_html\video_generator.py" "D:\xamp\htdocs\imgen\public_html\public_html\public\videos/background_video/bg_video_1765744306.mp4" "D:\xamp\htdocs\imgen\public_html\public_html\public\img/user_template/user_template_1765743912_693f1d288d5fd.png" "D:\xamp\htdocs\imgen\public_html\public_html\public\videos/generated_video/test_output_1765747329.mp4"
+
+==============================================
+Executing Python Script...
+==============================================
+
+Python Output:
+---
+ERROR: Error generating video: VideoClip.write_videofile() got an unexpected keyword argument 'verbose'
+============================================================
+Video Generator Script
+============================================================
+Background Video: D:\xamp\htdocs\imgen\public_html\public_html\public\videos/background_video/bg_video_1765744306.mp4
+Template Image: D:\xamp\htdocs\imgen\public_html\public_html\public\img/user_template/user_template_1765743912_693f1d288d5fd.png
+Output Video: D:\xamp\htdocs\imgen\public_html\public_html\public\videos/generated_video/test_output_1765747329.mp4
+============================================================
+Loading background video: D:\xamp\htdocs\imgen\public_html\public_html\public\videos/background_video/bg_video_1765744306.mp4
+Video properties - Duration: 15.05s, Size: 480x480
+Loading template: D:\xamp\htdocs\imgen\public_html\public_html\public\img/user_template/user_template_1765743912_693f1d288d5fd.png
+Creating wipe-in animation...
+Compositing video...
+Writing output video to: D:\xamp\htdocs\imgen\public_html\public_html\public\videos/generated_video/test_output_1765747329.mp4
+============================================================
+Video generation failed!
+Error: Error generating video: VideoClip.write_videofile() got an unexpected keyword argument 'verbose'
+============================================================
+---
+
+Return Code: 1
+Execution Time: 0.84 seconds
+
+Output File Created: Γ£ù NO
+
+==============================================
+Γ£ù TEST FAILED - Video generation failed
+==============================================

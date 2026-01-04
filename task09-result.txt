@@ -1,0 +1,28 @@
+PHP Warning:  Module "openssl" is already loaded in Unknown on line 0
+
+Warning: Module "openssl" is already loaded in Unknown on line 0
+==============================================
+VideoTask09 (Task ID: 28) - Verification
+==============================================
+
+Total Videos Generated: 2
+
+1. Video ID: 5
+   Customer: sp (ID: 2)
+   Video File: combined_video_1765750677_693f379580c01.mp4
+   File Size: 0.54 MB
+   Duration: 15s
+   Sent: No
+   Created: 2025-12-14 22:18:06
+
+2. Video ID: 6
+   Customer: sp (ID: 2)
+   Video File: combined_video_1765750686_693f379ea73b1.mp4
+   File Size: 0.53 MB
+   Duration: 15s
+   Sent: No
+   Created: 2025-12-14 22:18:16
+
+==============================================
+Γ£ô VideoTask09 successfully generated 2 videos!
+==============================================

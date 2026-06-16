@@ -1,410 +1,204 @@
-# Image & Video Generation System V2
+# Video Generation System
 
-A powerful Laravel-based web application for automated image and video generation with queue management, parallel processing, and GPU acceleration support.
+A powerful Laravel-based video generation system with GPU acceleration support, queue-based processing, and Instagram/Facebook integration.
 
-## 🚀 Features
+## Features
 
-- **Automated Video Generation**: Create videos from images with custom animations and transitions
-- **Queue Management System**: Efficient task queuing with status tracking
-- **Parallel Processing**: Multi-worker architecture for concurrent video generation
-- **GPU Acceleration**: NVIDIA NVENC and Intel Quick Sync support for faster encoding
-- **Social Media Integration**: Direct upload to Instagram and Facebook
-- **Template Management**: Customizable video templates with various animation effects
-- **RESTful API**: Complete API for task management and video generation
-- **Real-time Status Tracking**: Monitor video generation progress in real-time
+- ✅ **Automated Video Generation** - Create videos by overlaying custom templates on background videos
+- ✅ **GPU Acceleration** - NVENC support for 2-4x faster video encoding
+- ✅ **Queue System** - Parallel processing with multiple workers
+- ✅ **Real-time Progress** - Live progress updates as videos generate
+- ✅ **Multiple Rendering Engines** - FFmpeg (default) and MoviePy support
+- ✅ **Animation Effects** - 11+ animation effects for template overlays
+- ✅ **Social Media Integration** - Direct upload to Instagram and Facebook
+- ✅ **Customer Management** - Multi-customer support with custom templates
 
-## 📋 Prerequisites
+## System Requirements
 
-### System Requirements
-- **PHP**: 8.1 or higher
-- **Python**: 3.8 or higher
-- **MySQL/MariaDB**: 5.7 or higher
-- **Composer**: Latest version
-- **Node.js & NPM**: Latest LTS version
-- **FFmpeg**: Latest version with GPU support (optional but recommended)
+### Required Software
+- **PHP 8.1+** with extensions: OpenSSL, PDO, Mbstring, Tokenizer, XML, Ctype, JSON, BCMath, Fileinfo, GD/Imagick
+- **Python 3.10+** with packages: moviepy, Pillow, numpy, opencv-python
+- **MySQL 8.0+**
+- **FFmpeg** (with GPU support if available)
+- **Composer** (PHP dependency manager)
+- **Web Server** (Apache/Nginx)
 
-### Python Dependencies
-- moviepy
-- Pillow
-- requests
-- mysql-connector-python
-- facebook-sdk (for Facebook uploads)
-- instagrapi (for Instagram uploads)
+### Optional
+- **NVIDIA GPU** with NVENC support for hardware acceleration
+- **CUDA** for GPU-accelerated video processing
 
-### Optional (for GPU Acceleration)
-- NVIDIA GPU with CUDA support
-- Intel GPU with Quick Sync support
+## Installation
 
-## 🛠️ Installation
-
-### 1. Clone the Repository
+### 1. Clone/Copy Project
 ```bash
-git clone https://github.com/yuvrajarora1805/image_video_gen_V2.git
-cd image_video_gen_V2
+# Copy project to your web directory
+# Example: C:\xampp\htdocs\video-gen
 ```
 
-### 2. Install PHP Dependencies
+### 2. Install Dependencies
 ```bash
-composer install
+# PHP dependencies
+composer install --optimize-autoloader --no-dev
+
+# Python dependencies
+pip install moviepy Pillow numpy opencv-python
 ```
 
-### 3. Install Node Dependencies
+### 3. Configure Environment
 ```bash
-npm install
-```
-
-### 4. Install Python Dependencies
-```bash
-pip install moviepy Pillow requests mysql-connector-python facebook-sdk instagrapi
-```
-
-### 5. Environment Configuration
-```bash
-# Copy the example environment file
+# Copy example env file
 cp .env.example .env
 
 # Generate application key
 php artisan key:generate
+
+# Edit .env with your settings
 ```
 
-### 6. Configure Environment Variables
-Edit `.env` file and set the following:
-
+### 4. Update System Paths in `.env`
 ```env
-# Application
-APP_NAME="Image Video Gen V2"
-APP_ENV=local
-APP_DEBUG=true
-APP_URL=http://localhost
+# Update these paths for your system
+PYTHON_PATH=C:\Path\To\python.exe
+PHP_PATH=C:\Path\To\php.exe
 
-# Database
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
+# Database configuration
 DB_DATABASE=your_database_name
-DB_USERNAME=your_database_user
-DB_PASSWORD=your_database_password
-
-# File Paths (adjust to your system)
-# Windows example:
-# VIDEO_OUTPUT_PATH=D:/xamp/htdocs/imgen/public_html/public_html/public/videos
-# MUSIC_PATH=D:/xamp/htdocs/imgen/public_html/public_html/public/music
-
-# Social Media API Keys (optional)
-FACEBOOK_APP_ID=your_facebook_app_id
-FACEBOOK_APP_SECRET=your_facebook_app_secret
-INSTAGRAM_USERNAME=your_instagram_username
-INSTAGRAM_PASSWORD=your_instagram_password
+DB_USERNAME=your_db_username
+DB_PASSWORD=your_db_password
 ```
 
-### 7. Database Setup
+### 5. Database Setup
 
-#### Create Database
+**Option A: Automated Setup (Recommended)**
 ```bash
-# Login to MySQL
-mysql -u root -p
-
-# Create database
-CREATE DATABASE your_database_name;
-exit;
-```
-
-#### Run Migrations
-```bash
-# Run the main video generation schema
-mysql -u your_user -p your_database_name < database/migrations/video_generation_schema.sql
-
-# Or use Laravel migrations
+# Run migrations to create tables
 php artisan migrate
+
+# Clear cache
+php artisan config:clear
 ```
 
-### 8. Set Directory Permissions
+**Option B: Manual Import**
+1. Create a database (e.g., `laravel`)
+2. Import the provided `database_structure.sql` file using PHPMyAdmin or MySQL Workbench.
 
-#### Linux/Mac
+
+### 6. Create Required Directories
+```bash
+# Create storage directories
+mkdir -p storage/app/gpu_tasks
+mkdir -p storage/logs
+mkdir -p public/img/{master_template,user_template,background_image,generated_image}
+mkdir -p public/videos/{master_template,user_template,background_video,generated_video,thumbnails}
+```
+
+### 7. Set Permissions
+**Windows:**
+- Right-click folders → Properties → Security
+- Give full control to your web server user
+
+**Linux/Mac:**
 ```bash
 chmod -R 775 storage bootstrap/cache
-chmod -R 775 public/videos public/img/user_template
-chown -R www-data:www-data storage bootstrap/cache
+chmod -R 775 public/img public/videos
+chown -R www-data:www-data storage bootstrap/cache public/img public/videos
 ```
 
-#### Windows
-Ensure the web server has write permissions to:
-- `storage/`
-- `bootstrap/cache/`
-- `public/videos/`
-- `public/img/user_template/`
+## Usage
 
-### 9. Install FFmpeg
-
-#### Windows
-1. Download FFmpeg from [ffmpeg.org](https://ffmpeg.org/download.html)
-2. Extract and add to system PATH
-3. Verify: `ffmpeg -version`
-
-#### Linux
+### Start Queue Workers
 ```bash
-sudo apt update
-sudo apt install ffmpeg
-```
+# Start persistent workers (recommended)
+python run_workers_persistent.py
 
-#### Mac
-```bash
-brew install ffmpeg
-```
-
-## 🎬 Running the Application
-
-### 1. Start the Web Server
-
-#### Using PHP Built-in Server
-```bash
-php artisan serve
-```
-Access at: `http://localhost:8000`
-
-#### Using XAMPP/WAMP
-1. Place project in `htdocs` or `www` directory
-2. Configure virtual host
-3. Access via configured domain
-
-### 2. Start Video Generation Workers
-
-#### Windows
-```bash
-# Start worker processes
-start_workers.bat
-```
-
-#### Linux/Mac
-```bash
-# Make script executable
-chmod +x start_workers.sh
-
-# Start workers
-./start_workers.sh
-```
-
-#### Manual Worker Start
-```bash
-# Start individual worker
+# Or start auto-stopping workers
 python run_workers.py
 ```
 
-### 3. Access the Application
-
-- **Main Dashboard**: `http://localhost:8000`
-- **Video Generation**: `http://localhost:8000/generate`
-- **API Documentation**: `http://localhost:8000/api/tasks`
-
-## 📚 Usage Guide
-
-### Creating a Video Generation Task
-
-1. **Via Web Interface**:
-   - Navigate to `/generate`
-   - Upload images
-   - Select template and animation
-   - Configure video settings
-   - Click "Generate Video"
-
-2. **Via API**:
-```bash
-curl -X POST http://localhost:8000/api/tasks \
-  -H "Content-Type: application/json" \
-  -d '{
-    "customer_id": "CUST001",
-    "template_id": 1,
-    "images": ["image1.jpg", "image2.jpg"],
-    "animation": "slide_in",
-    "music": "background.mp3"
-  }'
+### Access Application
+Navigate to your application URL in a web browser:
+```
+http://localhost/your-project/public
 ```
 
-### Monitoring Task Status
+### Create Video Task
+1. Navigate to "Create Video Task"
+2. Select a video template
+3. Upload background video
+4. Choose animation effect
+5. Select rendering engine (FFmpeg recommended)
+6. Click "Add" then "Submit"
+7. Workers will process the task automatically
 
-```bash
-# Get all tasks
-curl http://localhost:8000/api/tasks
-
-# Get specific task
-curl http://localhost:8000/api/tasks/{task_id}
-
-# Get task status
-curl http://localhost:8000/api/tasks/{task_id}/status
-```
-
-### Managing Workers
-
-```bash
-# Check worker status
-python run_workers.py --status
-
-# Stop all workers
-python run_workers.py --stop
-
-# Restart workers
-python run_workers.py --restart
-```
-
-## 🔧 Configuration
+## Configuration
 
 ### GPU Acceleration
+Enable/disable GPU in the UI or update `.env`:
+```env
+USE_GPU=1  # 1 = enabled, 0 = disabled
+FORCE_NVENC=1  # Force NVIDIA NVENC encoder
+USE_CUDA_DECODE=1  # Use CUDA for decoding
+```
 
-Edit `parallel_video_generator.py` to enable GPU:
+### Rendering Engine
+Default is FFmpeg (faster, GPU-optimized). Can be changed per task in the UI.
 
+### Queue Workers
+Adjust number of workers in `run_workers_persistent.py`:
 ```python
-# Enable NVIDIA NVENC
-USE_GPU = True
-GPU_ENCODER = "h264_nvenc"
-
-# Or use Intel Quick Sync
-GPU_ENCODER = "h264_qsv"
+NUM_WORKERS = 4  # Change to desired number
 ```
 
-### Parallel Processing
-
-Configure worker count in `start_workers.bat`:
-
-```batch
-REM Adjust number of workers (default: 3)
-set WORKER_COUNT=3
-```
-
-### Animation Effects
-
-Available animations in `animation_library.py`:
-- `fade_in` - Fade in effect
-- `slide_in` - Slide from side
-- `zoom_in` - Zoom effect
-- `wipe` - Wipe transition
-- `flip` - 3D flip effect
-- `blur` - Blur transition
-- `spiral` - Spiral effect
-- `corner_wipe` - Corner wipe
-- `bounce` - Bounce effect
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-├── app/
-│   ├── Http/Controllers/
-│   │   ├── ApiController.php          # API endpoints
-│   │   ├── VideoController.php        # Video generation logic
-│   │   └── ImageGenerationController.php
-│   └── Models/
-│       ├── VideoTask.php              # Task model
-│       └── VideoTemplate.php          # Template model
-├── database/
-│   └── migrations/
-│       └── video_generation_schema.sql
-├── public/
-│   ├── videos/                        # Generated videos
-│   ├── img/user_template/             # User templates
-│   └── music/                         # Background music
-├── resources/views/
-│   ├── generate.blade.php             # Video generation UI
-│   └── layouts/
-├── routes/
-│   ├── web.php                        # Web routes
-│   └── api.php                        # API routes
-├── parallel_video_generator.py        # Main video generator
-├── animation_library.py               # Animation effects
-├── run_workers.py                     # Worker manager
-├── start_workers.bat                  # Worker launcher (Windows)
-└── .env                               # Environment configuration
+├── app/                    # Laravel application code
+│   ├── Http/Controllers/   # Controllers
+│   ├── Jobs/               # Queue jobs
+│   └── Models/             # Eloquent models
+├── database/               # Migrations and seeders
+├── public/                 # Public assets and uploads
+│   ├── img/                # Image templates and generated images
+│   └── videos/             # Video templates and generated videos
+├── resources/              # Views and frontend assets
+├── routes/                 # Application routes
+├── storage/                # Logs and temporary files
+├── video_generator.py      # Main video generation script
+├── parallel_video_generator.py  # GPU parallel processing
+├── ffmpeg_parallel_generator.py # FFmpeg parallel processing
+├── run_workers_persistent.py    # Worker launcher
+└── .env                    # Environment configuration
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
-### Videos Not Generating
-1. Check worker logs: `workers.log`
-2. Verify FFmpeg installation: `ffmpeg -version`
-3. Check database connection
-4. Ensure proper file permissions
+### Python not found
+**Solution:** Add Python to system PATH or use full path in `.env`
 
-### GPU Not Detected
-1. Install NVIDIA drivers (for NVENC)
-2. Verify GPU support: `python test_gpu.py`
-3. Check FFmpeg GPU build: `ffmpeg -encoders | grep nvenc`
+### FFmpeg not found
+**Solution:** Install FFmpeg and add to system PATH
 
-### Database Connection Issues
-1. Verify MySQL is running
-2. Check `.env` database credentials
-3. Ensure database exists
-4. Run migrations: `php artisan migrate`
+### Permission denied on storage
+**Solution:** Set correct permissions (see Installation step 7)
 
-### Permission Errors
-1. Set proper directory permissions
-2. Check web server user
-3. Verify storage directory access
+### Database connection failed
+**Solution:** Check `.env` database credentials and ensure MySQL is running
 
-## 📊 Database Schema
+### Queue workers not starting
+**Solution:** Check PHP path in `run_workers_persistent.py` or `.env`
 
-Key tables:
-- `video_tasks` - Video generation tasks
-- `video_templates` - Template configurations
-- `customers` - Customer information
-- `customer_videos` - Generated video records
+## Support
 
-See `database/migrations/video_generation_schema.sql` for complete schema.
+For issues:
+1. Check `storage/logs/laravel.log`
+2. Check web server error logs
+3. Verify all paths are correct in `.env`
+4. Ensure all prerequisites are installed
 
-## 🔐 Security
+## License
 
-- Never commit `.env` file
-- Keep credentials in `*_creds.txt` files (gitignored)
-- Use environment variables for sensitive data
-- Implement proper authentication for production
-- Sanitize user inputs
-- Use HTTPS in production
+This software is proprietary. Unauthorized distribution is prohibited.
 
-## 📝 API Endpoints
+## Credits
 
-### Tasks
-- `GET /api/tasks` - List all tasks
-- `POST /api/tasks` - Create new task
-- `GET /api/tasks/{id}` - Get task details
-- `PUT /api/tasks/{id}` - Update task
-- `DELETE /api/tasks/{id}` - Delete task
-- `POST /api/tasks/{id}/execute` - Execute task
-
-### Videos
-- `GET /api/videos` - List generated videos
-- `GET /api/videos/{id}` - Get video details
-- `POST /api/videos/upload` - Upload to social media
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature-name`
-3. Commit changes: `git commit -am 'Add feature'`
-4. Push to branch: `git push origin feature-name`
-5. Submit pull request
-
-## 📄 License
-
-This project is proprietary software. All rights reserved.
-
-## 👤 Author
-
-**Yuvraj Arora**
-- GitHub: [@yuvrajarora1805](https://github.com/yuvrajarora1805)
-
-## 🙏 Acknowledgments
-
-- Laravel Framework
-- MoviePy Library
-- FFmpeg Project
-- Intervention Image
-
-## 📞 Support
-
-For issues and questions:
-1. Check existing documentation
-2. Review troubleshooting section
-3. Check logs in `workers.log` and `storage/logs/`
-4. Create an issue on GitHub
-
----
-
-**Version**: 2.0  
-**Last Updated**: January 2026
+Developed with Laravel, Python, FFmpeg, and MoviePy.

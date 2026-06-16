@@ -165,6 +165,14 @@
             </li>
 
             <li class="nav-item">
+                <a class="nav-link py-1 px-2 {{ request()->routeIs('instagram.permanent-token') ? 'active' : '' }}"
+                   href="{{ route('instagram.permanent-token') }}">
+                    <i class="fas fa-magic text-primary"></i>
+                    <span class="ms-2 text-sm text-primary font-weight-bold">Permanent Token Tool</span>
+                </a>
+            </li>
+
+            <li class="nav-item">
                 <a class="nav-link py-1 px-2 {{ request()->routeIs('instagram.master-uploader') ? 'active' : '' }}"
                    href="{{ route('instagram.master-uploader') }}">
                     <i class="ni ni-cloud-upload-96 text-success"></i>

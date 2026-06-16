@@ -50,6 +50,19 @@ class TempFormController extends Controller
             $file = $request->file($fileField);
             $fileName = ($contentType === 'video' ? 'bg_video_' : 'bg_') . time() . '.' . $file->extension();
             
+            // Prevent duplicates: Check if this template is already in the queue
+            $existingTemp = Tempstore::where('mastertemplateid', $request->option)
+                                     ->where('content_type', $contentType)
+                                     ->first();
+            if ($existingTemp) {
+                return response()->json([
+                    'success' => true,
+                    'name' => $template->name,
+                    'total_count' => TemplatesByUser::where('master_template_id', $request->option)->where('content_type', $contentType)->count(),
+                    'message' => 'Template already in queue (Duplicate prevented)'
+                ]);
+            }
+
             // Determine upload directory
             $uploadDir = $contentType === 'video' ? 'videos/background_video' : 'img/background_image';
             $file->move(public_path($uploadDir), $fileName);
@@ -62,6 +75,7 @@ class TempFormController extends Controller
             if ($contentType === 'video') {
                 $tempData->video_type = $template->video_type ?? 'landscape';
                 $tempData->animation_effect = $request->input('animation_effect', 'wipe-in');
+                $tempData->rendering_engine = $request->input('rendering_engine', 'ffmpeg');
             }
             $tempData->save();
 

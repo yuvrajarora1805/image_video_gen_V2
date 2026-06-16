@@ -9,9 +9,14 @@
                                 <h5 class="mb-0">Instagram API Credentials</h5>
                                 <p class="text-sm mb-0">Manage your Instagram API access tokens and user IDs</p>
                             </div>
-                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addCredentialModal">
-                                <i class="fas fa-plus me-2"></i>Add Credential
-                            </button>
+                            <div class="d-flex align-items-center">
+                                <a href="{{ route('instagram.permanent-token') }}" class="btn btn-outline-primary btn-sm mb-0 me-2">
+                                    <i class="fas fa-magic me-2"></i>Permanent Token Tool
+                                </a>
+                                <button class="btn btn-primary btn-sm mb-0" data-bs-toggle="modal" data-bs-target="#addCredentialModal">
+                                    <i class="fas fa-plus me-2"></i>Add Credential
+                                </button>
+                            </div>
                         </div>
                         <div class="card-body px-0 pt-0 pb-2">
                             @if($credentials->count() > 0)

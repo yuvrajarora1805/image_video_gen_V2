@@ -7,6 +7,7 @@ use App\Models\ImageGeneration;
 use App\Models\GeneratedVideo;
 use App\Models\Task;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ApiController extends Controller
 {
@@ -16,22 +17,44 @@ class ApiController extends Controller
         try {
             $tasklist = Task::where('sent_status', 0)->get();
 
+            if ($tasklist->isEmpty()) {
+                return response()->json([]);
+            }
+
+            $taskIds = $tasklist->pluck('id')->toArray();
+
+            // Bulk fetch expected images count from before_genration and templates_by_user
+            $expectedCounts = DB::table('before_genration as bg')
+                ->leftJoin('templates_by_user as tu', 'bg.mastertemplateid', '=', 'tu.master_template_id')
+                ->select('bg.taskid', DB::raw('count(tu.id) as expected_count'))
+                ->whereIn('bg.taskid', $taskIds)
+                ->groupBy('bg.taskid')
+                ->get()
+                ->pluck('expected_count', 'taskid');
+
+            // Bulk fetch actual generated images stats from generated_image
+            $imageStats = ImageGeneration::select('taskid',
+                DB::raw('count(*) as total'),
+                DB::raw('sum(case when sent = 1 then 1 else 0 end) as sent'),
+                DB::raw('sum(case when sent = 0 then 1 else 0 end) as pending')
+            )
+            ->whereIn('taskid', $taskIds)
+            ->groupBy('taskid')
+            ->get()
+            ->keyBy('taskid');
+
             $sno = 0;
-            $data = []; 
+            $data = [];
 
             foreach ($tasklist as $task) {
                 $sno++;
 
-                // Count expected images from templates
-                $expectedImages = \DB::table('before_genration as bg')
-                    ->leftJoin('templates_by_user as tu', 'bg.mastertemplateid', '=', 'tu.master_template_id')
-                    ->where('bg.taskid', $task->id)
-                    ->count('tu.id');
+                $expectedImages = $expectedCounts->get($task->id, 0);
+                $stats = $imageStats->get($task->id);
 
-                // Count actual generated images
-                $totalimage = ImageGeneration::where('taskid', $task->id)->count();
-                $totalsentimage = ImageGeneration::where('taskid', $task->id)->where('sent', 1)->count();
-                $totalfailedimage = ImageGeneration::where('taskid', $task->id)->where('sent', 0)->count();
+                $totalimage = $stats ? (int)$stats->total : 0;
+                $totalsentimage = $stats ? (int)$stats->sent : 0;
+                $totalfailedimage = $stats ? (int)$stats->pending : 0;
 
                 // If no images generated yet, show expected as pending
                 $finalTotal = max($expectedImages, $totalimage);
@@ -47,9 +70,10 @@ class ApiController extends Controller
                 ];
             }
 
-            return response()->json($data); 
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500); 
+            return response()->json($data);
+        }
+        catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
@@ -65,14 +89,14 @@ class ApiController extends Controller
                 $sno++;
 
                 // Count expected videos from templates
-            $expectedVideos = \DB::table('before_genration as bg')
-                ->leftJoin('templates_by_user as tu', function($join) {
+                $expectedVideos = \DB::table('before_genration as bg')
+                    ->leftJoin('templates_by_user as tu', function ($join) {
                     $join->on('bg.mastertemplateid', '=', 'tu.master_template_id')
-                         ->where('tu.content_type', '=', 'video');
+                        ->where('tu.content_type', '=', 'video');
                 })
-                ->where('bg.taskid', $task->id)
-                ->where('bg.content_type', 'video')
-                ->count('tu.id');
+                    ->where('bg.taskid', $task->id)
+                    ->where('bg.content_type', 'video')
+                    ->count('tu.id');
 
                 // Count actual generated videos
                 $totalvideos = GeneratedVideo::where('taskid', $task->id)->count();
@@ -97,7 +121,8 @@ class ApiController extends Controller
 
             // Always return an array (even if only one or zero tasks)
             return response()->json($data);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
@@ -121,7 +146,7 @@ class ApiController extends Controller
                     $remainingVideos = GeneratedVideo::where('taskid', $taskId)
                         ->where('sent', 0)
                         ->count();
-                    
+
                     // If no more pending videos, update task status
                     if ($remainingVideos == 0) {
                         Task::where('id', $taskId)->update([
@@ -129,16 +154,19 @@ class ApiController extends Controller
                             'remark' => 'Success - All Videos Sent'
                         ]);
                     }
-                    
+
                     return response()->json(['message' => 'Video sent successfully'], 200);
-                } else {
+                }
+                else {
                     return response()->json(['error' => 'Failed to update video'], 500);
                 }
-            } else {
+            }
+            else {
                 return response()->json(['error' => 'Video not found'], 404);
             }
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
@@ -155,7 +183,8 @@ class ApiController extends Controller
             }
 
             return response()->json($subtasklist);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
@@ -163,7 +192,7 @@ class ApiController extends Controller
 
     public function getimagelist(Request $request)
     {
-    
+
         try {
             $imagelist = ImageGeneration::where('sent', 0)
                 ->where('beforeid', $request->subtaskid)
@@ -174,16 +203,17 @@ class ApiController extends Controller
             }
 
             return response()->json($imagelist);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
-   
+
 
     public function getimage(Request $request)
     {
-        
-            
+
+
         try {
             $data = [];
 
@@ -212,7 +242,8 @@ class ApiController extends Controller
             return response([
                 $data
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
 
             $response = [
                 'success' => false,
@@ -245,7 +276,7 @@ class ApiController extends Controller
                     $remainingImages = ImageGeneration::where('taskid', $taskId)
                         ->where('sent', 0)
                         ->count();
-                    
+
                     // If no more pending images, update task status
                     if ($remainingImages == 0) {
                         Task::where('id', $taskId)->update([
@@ -253,19 +284,22 @@ class ApiController extends Controller
                             'remark' => 'Success - All Images Sent'
                         ]);
                     }
-                    
+
                     // Update successful
                     return response()->json(['message' => 'Image sent successfully'], 200);
-                } else {
+                }
+                else {
                     // Update failed
                     return response()->json(['error' => 'Failed to update image'], 500);
                 }
-            } else {
+            }
+            else {
                 // Image not found
                 return response()->json(['error' => 'Image not found'], 404);
             }
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
@@ -283,7 +317,7 @@ class ApiController extends Controller
                 ->with(['customer'])
                 ->orderBy('id', 'desc')
                 ->get();
-            
+
             if ($videos->isEmpty()) {
                 return response()->json(['success' => true, 'videos' => [], 'message' => 'No videos generated yet']);
             }
@@ -305,9 +339,10 @@ class ApiController extends Controller
                     'created_at' => $video->created_at->format('d M Y H:i')
                 ];
             }
-            
+
             return response()->json(['success' => true, 'videos' => $videoList, 'total' => count($videoList)]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
@@ -321,15 +356,15 @@ class ApiController extends Controller
             // Run Python script to check GPU status
             $pythonScript = base_path('video_generator.py');
             $command = "python \"{$pythonScript}\" --check-gpu 2>&1";
-            
+
             $output = shell_exec($command);
-            
+
             if ($output) {
                 // Clean up the output (remove any extra whitespace/newlines)
                 $output = trim($output);
-                
+
                 $gpuStatus = json_decode($output, true);
-                
+
                 if ($gpuStatus && is_array($gpuStatus)) {
                     return response()->json([
                         'success' => true,
@@ -340,7 +375,7 @@ class ApiController extends Controller
                     ]);
                 }
             }
-            
+
             // Fallback: check .env file
             $useGpu = env('USE_GPU', '1');
             return response()->json([
@@ -350,8 +385,9 @@ class ApiController extends Controller
                 'encoder' => null,
                 'message' => 'Unable to detect GPU, using .env configuration'
             ]);
-            
-        } catch (\Exception $e) {
+
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()
@@ -366,24 +402,24 @@ class ApiController extends Controller
     {
         try {
             $envFile = base_path('.env');
-            
+
             if (!file_exists($envFile)) {
                 return response()->json([
                     'success' => false,
                     'message' => '.env file not found'
                 ], 404);
             }
-            
+
             $envContent = file_get_contents($envFile);
-            
+
             // Read current value directly from file to avoid cache issues
             $currentValue = '1'; // default
             if (preg_match('/USE_GPU=(.*)/', $envContent, $matches)) {
                 $currentValue = trim($matches[1]);
             }
-            
+
             $newValue = ($currentValue === '1') ? '0' : '1';
-            
+
             // Check if USE_GPU exists in .env
             if (strpos($envContent, 'USE_GPU=') !== false) {
                 // Update existing value
@@ -392,31 +428,32 @@ class ApiController extends Controller
                     'USE_GPU=' . $newValue,
                     $envContent
                 );
-            } else {
+            }
+            else {
                 // Add new line
                 $envContent .= "\nUSE_GPU=" . $newValue;
             }
-            
+
             file_put_contents($envFile, $envContent);
-            
+
             // Clear config cache
             \Artisan::call('config:clear');
-            
+
             // Set environment variable for current request
             putenv("USE_GPU={$newValue}");
             $_ENV['USE_GPU'] = $newValue;
-            
+
             // Get updated GPU status
             $pythonScript = base_path('video_generator.py');
             $command = "python \"{$pythonScript}\" --check-gpu 2>&1";
             $output = shell_exec($command);
-            
+
             $gpuStatus = null;
             if ($output) {
                 $output = trim($output);
                 $gpuStatus = json_decode($output, true);
             }
-            
+
             return response()->json([
                 'success' => true,
                 'enabled' => $newValue === '1',
@@ -424,8 +461,9 @@ class ApiController extends Controller
                 'encoder' => $gpuStatus['encoder'] ?? null,
                 'message' => 'GPU acceleration ' . ($newValue === '1' ? 'enabled' : 'disabled')
             ]);
-            
-        } catch (\Exception $e) {
+
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()

@@ -27,7 +27,7 @@ class UploadVideoCommand extends Command
     /**
      * Graph API Version
      */
-    protected $apiVersion = 'v19.0';
+    protected $apiVersion = 'v25.0';
 
     /**
      * Execute the console command.

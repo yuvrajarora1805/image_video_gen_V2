@@ -72,6 +72,18 @@
                                     </select>
                                     <small class="text-muted">Choose how the template will appear over the background video</small>
                                 </div>
+
+                                <div class="mb-3">
+                                    <label for="renderingEngine" class="form-label">Rendering Engine</label>
+                                    <select id="renderingEngine" class="form-select">
+                                        <option value="ffmpeg" selected>FFmpeg (Faster, GPU-optimized)</option>
+                                        <option value="moviepy">MoviePy (Flexible, Python-based)</option>
+                                    </select>
+                                    <small class="text-muted">
+                                        <strong>MoviePy:</strong> Flexible animations, easier debugging<br>
+                                        <strong>FFmpeg:</strong> 2-4x faster, GPU-optimized filtergraphs
+                                    </small>
+                                </div>
                                 <button type="button" id="addButton" class="btn btn-primary mt-3">Add</button>
                         </div>
                                 <div class="col-md-6">
@@ -92,6 +104,7 @@
                                     <th>Template Name</th>
                                     <th>Background Video</th>
                                     <th>Animation</th>
+                                    <th>Rendering Engine</th>
                                     <th>Total Videos</th>
                                     <th>Action</th>
                                 </tr>
@@ -163,16 +176,73 @@
             }
         });
 
+        // Animation options by rendering engine
+        const animationsByEngine = {
+            'ffmpeg': [
+                { value: 'fade-in', label: 'Fade In' },
+                { value: 'slide-in', label: 'Slide In' },
+                { value: 'zoom-in', label: 'Zoom In' },
+                { value: 'bounce-in', label: 'Bounce In' },
+                { value: 'flip-in', label: 'Flip In' },
+                { value: 'none', label: 'None' },
+                { value: 'bounce-drop', label: 'Bounce Drop' },
+                { value: 'bounce-slide', label: 'Bounce Slide' },
+                { value: 'flip-vertical', label: 'Flip Vertical' },
+                { value: 'elastic-scale', label: 'Elastic Scale' },
+                { value: 'spin-reveal', label: 'Spin Reveal' }
+            ],
+            'moviepy': [
+                { value: 'wipe-in', label: 'Wipe In' },
+                { value: 'fade-in', label: 'Fade In' },
+                { value: 'slide-in', label: 'Slide In' },
+                { value: 'zoom-in', label: 'Zoom In' },
+                { value: 'blur-in', label: 'Blur In' },
+                { value: 'corner-wipe', label: 'Corner Wipe' },
+                { value: 'curtain', label: 'Curtain' },
+                { value: 'flash-zoom', label: 'Flash Zoom' },
+                { value: 'elastic-scale', label: 'Elastic Scale' },
+                { value: 'spin-reveal', label: 'Spin Reveal' },
+                { value: 'none', label: 'None' }
+            ]
+        };
+
+        // Update animation dropdown when rendering engine changes
+        $('#renderingEngine').on('change', function() {
+            const engine = $(this).val();
+            const animations = animationsByEngine[engine] || animationsByEngine['moviepy'];
+            
+            const $animationSelect = $('#animationEffect');
+            const currentValue = $animationSelect.val();
+            
+            // Clear and repopulate
+            $animationSelect.empty();
+            animations.forEach(anim => {
+                $animationSelect.append(
+                    $('<option>', { value: anim.value, text: anim.label })
+                );
+            });
+            
+            // Restore selection if still available
+            if (animations.find(a => a.value === currentValue)) {
+                $animationSelect.val(currentValue);
+            }
+        });
+
+        // Initialize with FFmpeg animations on page load
+        $('#renderingEngine').trigger('change');
+
         let tempData = [];
 
         $('#addButton').on('click', function() {
             const dropdown = $('#dropdown');
             const videoUpload = $('#videoUpload')[0];
             const animationEffect = $('#animationEffect');
+            const renderingEngine = $('#renderingEngine');
             const selectedOption = dropdown.find('option:selected');
             const templateId = selectedOption.val();
             const templateName = selectedOption.text();
             const selectedAnimation = animationEffect.val();
+            const selectedEngine = renderingEngine.val();
 
             if (!templateId || !videoUpload.files[0]) {
                 alert('Please select a template and upload a background video.');
@@ -187,6 +257,7 @@
             formData.append('option', templateId);
             formData.append('video', videoFile);
             formData.append('animation_effect', selectedAnimation);
+            formData.append('rendering_engine', selectedEngine);
 
             // Disable button while processing
             const addBtn = $(this);
@@ -207,13 +278,15 @@
                             templateName: templateName,
                             videoName: videoFile.name,
                             totalVideos: response.total_image || 0,
-                            animationEffect: selectedAnimation
+                            animationEffect: selectedAnimation,
+                            renderingEngine: selectedEngine
                         });
                         
                         updateTable();
                         dropdown.val('');
                         videoUpload.value = '';
-                        animationEffect.val('wipe-in'); // Reset to default
+                        animationEffect.val('fade-in'); // Reset to default for FFmpeg
+                        renderingEngine.val('ffmpeg'); // Reset to default
                         $('#uploadPreview').attr('src', '').hide();
                         $('#templatePreview').attr('src', '').hide();
                         addBtn.prop('disabled', false).text('Add');
@@ -238,11 +311,17 @@
                 // Format animation name for display
                 const animationDisplay = item.animationEffect ? item.animationEffect.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Wipe In';
                 
+                // Format rendering engine for display
+                const engineDisplay = item.renderingEngine === 'ffmpeg' ? 
+                    '<span class="badge bg-success">FFmpeg</span>' : 
+                    '<span class="badge bg-primary">MoviePy</span>';
+                
                 const row = `
                     <tr>
                         <td>${item.templateName}</td>
                         <td>${item.videoName}</td>
                         <td><span class="badge bg-info">${animationDisplay}</span></td>
+                        <td>${engineDisplay}</td>
                         <td>${item.totalVideos}</td>
                         <td><button class="btn btn-danger btn-sm deleteRow" data-index="${index}" data-id="${item.id}">Delete</button></td>
                     </tr>

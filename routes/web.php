@@ -237,6 +237,9 @@ Route::prefix('instagram')->middleware('auth')->group(function () {
     Route::get('/all-pending-videos', [App\Http\Controllers\InstagramController::class, 'getAllPendingVideos'])->name('instagram.all-pending-videos');
     Route::post('/save-default-platform', [App\Http\Controllers\InstagramController::class, 'saveDefaultPlatform'])->name('instagram.save-default-platform');
     Route::get('/get-default-platform', [App\Http\Controllers\InstagramController::class, 'getDefaultPlatform'])->name('instagram.get-default-platform');
+    
+    // Permanent Token Tool
+    Route::get('/permanent-token', [App\Http\Controllers\InstagramController::class, 'getPermanentTokens'])->name('instagram.permanent-token');
 });
 
 // Upload callback route (outside auth middleware for Python script access)

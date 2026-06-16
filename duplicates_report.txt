@@ -1,0 +1,2 @@
+--- Checking templates_by_user duplicates ---
+No duplicates found based on (customer_id, master_template_id).

@@ -35,7 +35,7 @@ class GenerateVideoCPUJob implements ShouldQueue
         try {
             Log::info("Starting video generation for: " . basename($this->video['output']));
             
-            $python = 'C:\\Users\\yuvra\\AppData\\Local\\Programs\\Python\\Python313\\python.exe';
+            $python = env('PYTHON_PATH', 'python');
             $script = base_path('video_generator.py');
 
             // Check GPU settings
@@ -51,10 +51,18 @@ class GenerateVideoCPUJob implements ShouldQueue
             
             Log::info("GPU Acceleration Status: " . ($useGpu == '1' ? 'Enabled' : 'Disabled'));
 
-            // Build command - inject USE_GPU env var
-            // "set USE_GPU=x && python ..."
+            // Prepare environment variables for FFmpeg
+            $envPrefix = '';
+            $ffmpegPath = env('FFMPEG_PATH');
+            if ($ffmpegPath && file_exists($ffmpegPath)) {
+                $ffmpegDir = dirname($ffmpegPath);
+                $envPrefix = "set PATH={$ffmpegDir};%PATH% && set IMAGEIO_FFMPEG_EXE={$ffmpegPath} && ";
+            }
+
+            // Build command - inject USE_GPU and FFMPEG env vars
             $cmd = sprintf(
-                'set USE_GPU=%s && "%s" "%s" "%s" "%s" "%s" "%s" 2>&1',
+                '%s set USE_GPU=%s && "%s" "%s" "%s" "%s" "%s" "%s" 2>&1',
+                $envPrefix,
                 $useGpu,
                 $python,
                 $script,
@@ -122,16 +130,18 @@ class GenerateVideoCPUJob implements ShouldQueue
                 
             Log::info("Task {$taskId} progress: {$generatedCount}/{$expectedCount}");
             
-            if ($generatedCount >= $expectedCount && $expectedCount > 0) {
-                Log::info("🎉 Task {$taskId} completed! Marking as done.");
-                
-                $task = Task::find($taskId);
-                if ($task) {
+            // Update task with real-time progress
+            $task = Task::find($taskId);
+            if ($task) {
+                if ($generatedCount >= $expectedCount && $expectedCount > 0) {
+                    Log::info("🎉 Task {$taskId} completed! Marking as done.");
                     $task->status = 1; // Completed
-                    $task->remark = 'Generated - Ready to Send';
-                    $task->finished_at = now();
-                    $task->save();
+                    $task->remark = "Task Executed Successfully ({$generatedCount} videos generated)";
+                } else {
+                    // Update progress in remark
+                    $task->remark = "Processing: {$generatedCount}/{$expectedCount} videos generated";
                 }
+                $task->save();
             }
 
         } catch (\Exception $e) {

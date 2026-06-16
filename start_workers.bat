@@ -1,18 +1,7 @@
 @echo off
-title Laravel Queue Manager
-echo Starting 3 Video Processing Workers...
-echo.
+REM Video Queue Workers - Auto-Start Script
+REM This script starts persistent queue workers
 
-:: Worker 1
-start "Video Worker 1" /MIN php artisan queue:work --queue=video_cpu --sleep=1 --tries=2
-
-:: Worker 2
-start "Video Worker 2" /MIN php artisan queue:work --queue=video_cpu --sleep=1 --tries=2
-
-:: Worker 3
-start "Video Worker 3" /MIN php artisan queue:work --queue=video_cpu --sleep=1 --tries=2
-
-echo ✅ 3 Workers Started in background windows!
-echo DO NOT close the minimized windows.
-echo.
-pause
+cd /d D:\xamp\htdocs\imgen\public_html\public_html
+echo Starting Video Queue Workers...
+python run_workers_persistent.py

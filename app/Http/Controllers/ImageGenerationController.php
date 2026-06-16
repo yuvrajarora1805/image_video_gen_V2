@@ -168,7 +168,7 @@ class ImageGenerationController extends Controller
                     foreach ($taskprocess as $td) {
                         $backgroundpath = public_path('img/background_image/' . $td->backgroundimage);
 
-                        $frontimages = TemplatesByUser::where('master_template_id', $td->mastertemplateid)->get();
+                        $frontimages = TemplatesByUser::where('master_template_id', $td->mastertemplateid)->where('content_type', 'image')->get();
                         // dd($frontimages);
                         foreach ($frontimages as $fi) {
                             try {

@@ -207,7 +207,7 @@ class InstagramController extends Controller
 
         // Test Instagram
         try {
-            $url = "https://graph.facebook.com/v19.0/{$credential->ig_user_id}";
+            $url = "https://graph.facebook.com/v25.0/{$credential->ig_user_id}";
             $response = file_get_contents($url . "?fields=id,username&access_token=" . $credential->access_token);
             
             if ($response === false) {
@@ -236,7 +236,7 @@ class InstagramController extends Controller
         // Test Facebook if Page ID is configured
         if ($credential->facebook_page_id) {
             try {
-                $url = "https://graph.facebook.com/v19.0/{$credential->facebook_page_id}";
+                $url = "https://graph.facebook.com/v25.0/{$credential->facebook_page_id}";
                 $response = file_get_contents($url . "?fields=id,name&access_token=" . $credential->access_token);
                 
                 if ($response === false) {
@@ -818,7 +818,7 @@ class InstagramController extends Controller
             $shortToken = $request->short_token;
 
             // Step 1: Exchange for long-lived user token
-            $exchangeUrl = "https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id={$appId}&client_secret={$appSecret}&fb_exchange_token={$shortToken}";
+            $exchangeUrl = "https://graph.facebook.com/v25.0/oauth/access_token?grant_type=fb_exchange_token&client_id={$appId}&client_secret={$appSecret}&fb_exchange_token={$shortToken}";
             
             $response = file_get_contents($exchangeUrl);
             $data = json_decode($response, true);
@@ -834,7 +834,7 @@ class InstagramController extends Controller
             $longLivedToken = $data['access_token'];
 
             // Step 2: Get user pages (for page access token)
-            $pagesUrl = "https://graph.facebook.com/v19.0/me/accounts?access_token={$longLivedToken}";
+            $pagesUrl = "https://graph.facebook.com/v25.0/me/accounts?access_token={$longLivedToken}";
             $pagesResponse = file_get_contents($pagesUrl);
             $pagesData = json_decode($pagesResponse, true);
 
@@ -842,7 +842,7 @@ class InstagramController extends Controller
             if (isset($pagesData['data'])) {
                 foreach ($pagesData['data'] as $page) {
                     // Get Instagram Business Account ID for this page
-                    $igAccountUrl = "https://graph.facebook.com/v19.0/{$page['id']}?fields=instagram_business_account&access_token={$page['access_token']}";
+                    $igAccountUrl = "https://graph.facebook.com/v25.0/{$page['id']}?fields=instagram_business_account&access_token={$page['access_token']}";
                     $igResponse = @file_get_contents($igAccountUrl);
                     $igData = json_decode($igResponse, true);
 
@@ -899,7 +899,7 @@ class InstagramController extends Controller
             $userAccessToken = $request->access_token;
 
             // Fetch user's Facebook pages
-            $pagesUrl = "https://graph.facebook.com/v19.0/me/accounts?access_token={$userAccessToken}";
+            $pagesUrl = "https://graph.facebook.com/v25.0/me/accounts?access_token={$userAccessToken}";
             $response = @file_get_contents($pagesUrl);
             
             if ($response === false) {
@@ -907,6 +907,15 @@ class InstagramController extends Controller
             }
 
             $data = json_decode($response, true);
+            
+            // Debugging: Check granted permissions
+            $debugUrl = "https://graph.facebook.com/v25.0/debug_token?input_token={$userAccessToken}&access_token={$userAccessToken}";
+            $debugResponse = @file_get_contents($debugUrl);
+            $grantedScopes = [];
+            if ($debugResponse) {
+                $debugData = json_decode($debugResponse, true);
+                $grantedScopes = $debugData['data']['scopes'] ?? [];
+            }
 
             if (isset($data['error'])) {
                 throw new \Exception($data['error']['message'] ?? 'Invalid access token');
@@ -915,20 +924,43 @@ class InstagramController extends Controller
             $pages = [];
             if (isset($data['data']) && is_array($data['data'])) {
                 foreach ($data['data'] as $page) {
+                    // Fetch linked Instagram Business Account ID
+                    $igUrl = "https://graph.facebook.com/v25.0/{$page['id']}?fields=instagram_business_account&access_token={$page['access_token']}";
+                    $igResponse = @file_get_contents($igUrl);
+                    $igId = null;
+                    if ($igResponse) {
+                        $igData = json_decode($igResponse, true);
+                        $igId = $igData['instagram_business_account']['id'] ?? null;
+                    }
+
                     $pages[] = [
                         'id' => $page['id'],
                         'name' => $page['name'],
                         'access_token' => $page['access_token'],
                         'category' => $page['category'] ?? 'Unknown',
-                        'tasks' => $page['tasks'] ?? []
+                        'tasks' => $page['tasks'] ?? [],
+                        'ig_business_account_id' => $igId
                     ];
+                }
+            }
+
+            // If zero pages found, check if pages_show_list is missing
+            $missingPermissions = [];
+            if (empty($pages)) {
+                if (!empty($grantedScopes)) {
+                    if (!in_array('pages_show_list', $grantedScopes)) $missingPermissions[] = 'pages_show_list';
+                    if (!in_array('pages_read_engagement', $grantedScopes)) $missingPermissions[] = 'pages_read_engagement';
+                    if (!in_array('pages_manage_posts', $grantedScopes)) $missingPermissions[] = 'pages_manage_posts';
                 }
             }
 
             return response()->json([
                 'success' => true,
                 'pages' => $pages,
-                'total' => count($pages)
+                'total' => count($pages),
+                'granted_scopes' => $grantedScopes,
+                'missing_permissions' => $missingPermissions,
+                'debug_info' => empty($pages) ? 'Success but no pages found. Check if you selected pages in the FB login dialog.' : null
             ]);
 
         } catch (\Exception $e) {
@@ -1095,6 +1127,66 @@ class InstagramController extends Controller
                 'message' => 'Error loading preference: ' . $e->getMessage(),
                 'platform' => 'instagram'
             ], 500);
+        }
+    }
+
+    /**
+     * Tool to convert a short-lived token into permanent page tokens
+     */
+    public function getPermanentTokens(Request $request)
+    {
+        $shortToken = $request->query('token');
+        $clientId = env('FACEBOOK_CLIENT_ID');
+        $clientSecret = env('FACEBOOK_CLIENT_SECRET');
+
+        if (!$shortToken) {
+            return view('instagram.permanent-tool');
+        }
+
+        if (!$clientId || !$clientSecret || $clientSecret == 'PASTE_YOUR_SECRET_HERE') {
+            return view('instagram.permanent-tool', ['error' => 'Please fill FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET in your .env file, or provide custom credentials in the Advanced section.']);
+        }
+
+        try {
+            // STEP 1: Exchange for Long-Lived User Token (60 days)
+            $exchangeUrl = "https://graph.facebook.com/v25.0/oauth/access_token?grant_type=fb_exchange_token&client_id={$clientId}&client_secret={$clientSecret}&fb_exchange_token={$shortToken}";
+            
+            $ctx = stream_context_create(['http' => ['ignore_errors' => true]]);
+            $exchangeResponse = @file_get_contents($exchangeUrl, false, $ctx);
+            $exchangeData = json_decode($exchangeResponse, true);
+
+            if (!isset($exchangeData['access_token'])) {
+                $errorMsg = $exchangeData['error']['message'] ?? 'Failed to exchange token. Check your App ID/Secret.';
+                return view('instagram.permanent-tool', ['error' => $errorMsg]);
+            }
+            
+            $longLivedToken = $exchangeData['access_token'];
+
+            // STEP 2: Fetch Page Tokens (These will be PERMANENT because we are using a long-lived User token)
+            $pagesUrl = "https://graph.facebook.com/v25.0/me/accounts?access_token={$longLivedToken}&fields=name,id,access_token,instagram_business_account&limit=100";
+            $pagesResponse = @file_get_contents($pagesUrl);
+            $pagesData = json_decode($pagesResponse, true);
+
+            $results_data = [];
+            if (isset($pagesData['data'])) {
+                foreach ($pagesData['data'] as $page) {
+                    $results_data[] = [
+                        'page_name' => $page['name'],
+                        'facebook_page_id' => $page['id'],
+                        'permanent_access_token' => $page['access_token'],
+                        'instagram_business_id' => $page['instagram_business_account']['id'] ?? 'Not linked'
+                    ];
+                }
+            }
+
+            $results = [
+                'permanent_page_tokens' => $results_data
+            ];
+
+            return view('instagram.permanent-tool', compact('results'));
+
+        } catch (\Exception $e) {
+            return view('instagram.permanent-tool', ['error' => $e->getMessage()]);
         }
     }
 }

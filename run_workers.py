@@ -4,10 +4,30 @@ import sys
 import os
 import signal
 
+# Load PHP path from .env file
+def load_env():
+    """Load environment variables from .env file"""
+    env_path = os.path.join(os.path.dirname(__file__), '.env')
+    php_path = 'php'  # Default fallback
+    
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('PHP_PATH='):
+                        php_path = line.split('=', 1)[1].strip()
+                        break
+        except Exception as e:
+            print(f"⚠️  Warning: Could not read .env file: {e}")
+    
+    return php_path
+
 # Configuration
 NUM_WORKERS = 4
+PHP_PATH = load_env()
 # --stop-when-empty ensures the worker exits automatically when queue is empty
-QUEUE_CMD = [r"D:\xamp\php\php.exe", "artisan", "queue:work", "--queue=video_cpu", "--sleep=1", "--tries=2", "--stop-when-empty"]
+QUEUE_CMD = [PHP_PATH, "artisan", "queue:work", "--queue=video_cpu", "--sleep=1", "--tries=2", "--stop-when-empty"]
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Log startup immediately for user verification

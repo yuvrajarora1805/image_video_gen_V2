@@ -6,7 +6,7 @@ import argparse
 import logging
 import os
 
-GRAPH_API_VERSION = "v19.0"
+GRAPH_API_VERSION = "v25.0"
 BASE_URL = f"https://graph.facebook.com/{GRAPH_API_VERSION}"
 
 # =====================================================
@@ -57,27 +57,38 @@ def wait_for_processing(media_id, access_token, max_attempts=30):
 
     status_url = f"{BASE_URL}/{media_id}"
     params = {
-        "fields": "status_code",
+        "fields": "status_code,status,error_message",
         "access_token": access_token
     }
 
     attempt = 0
     while attempt < max_attempts:
-        res = requests.get(status_url, params=params)
-        res.raise_for_status()
+        try:
+            res = requests.get(status_url, params=params)
+            res.raise_for_status()
+            data = res.json()
 
-        status = res.json().get("status_code")
-        log_print(f"[IG] Status: {status}")
+            status = data.get("status_code")
+            error_msg = data.get("error_message")
+            log_print(f"[IG] Status: {status}")
 
-        if status == "FINISHED":
-            log_print("[IG] Processing complete")
-            return
+            if status == "FINISHED":
+                log_print("[IG] Processing complete")
+                return
 
-        if status == "ERROR":
-            raise Exception("Instagram failed to process the video")
+            if status == "ERROR":
+                detailed_error = error_msg if error_msg else "Unknown Instagram processing error"
+                log_print(f"[ERROR] Instagram Video Error: {detailed_error}", "error")
+                raise Exception(detailed_error)
 
-        attempt += 1
-        time.sleep(10)
+            attempt += 1
+            time.sleep(10)
+        except Exception as e:
+            if "status_code" in str(e): # re-raise if it's our own exception
+                raise e
+            log_print(f"[⚠] Status check attempt {attempt+1} failed: {e}", "info")
+            attempt += 1
+            time.sleep(10)
 
     raise TimeoutError("Instagram processing timed out")
 

@@ -20,5 +20,6 @@ class Tempstore extends Model
         'content_type',
         'video_type',
         'animation_effect',
+        'rendering_engine',
     ];
 }

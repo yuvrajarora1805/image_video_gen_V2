@@ -1,0 +1,41 @@
+--- Test Video Generator ---
+
+Output directory exists: D:\xamp\htdocs\imgen\public_html\public_html\test_output
+
+Testing Animation: wipe-in
+SUCCESS: D:\xamp\htdocs\imgen\public_html\public_html\test_output\test_wipe-in.mp4 (7.20 MB)
+
+Testing Animation: fade-in
+SUCCESS: D:\xamp\htdocs\imgen\public_html\public_html\test_output\test_fade-in.mp4 (7.29 MB)
+
+Testing Animation: slide-in
+SUCCESS: D:\xamp\htdocs\imgen\public_html\public_html\test_output\test_slide-in.mp4 (7.26 MB)
+
+Testing Animation: zoom-in
+SUCCESS: D:\xamp\htdocs\imgen\public_html\public_html\test_output\test_zoom-in.mp4 (7.32 MB)
+
+Testing Animation: bounce-in
+SUCCESS: D:\xamp\htdocs\imgen\public_html\public_html\test_output\test_bounce-in.mp4 (7.31 MB)
+
+Testing Animation: spiral-in
+SUCCESS: D:\xamp\htdocs\imgen\public_html\public_html\test_output\test_spiral-in.mp4 (7.40 MB)
+
+Testing Animation: none
+SUCCESS: D:\xamp\htdocs\imgen\public_html\public_html\test_output\test_none.mp4 (7.18 MB)
+
+Testing Animation: flip-in
+SUCCESS: D:\xamp\htdocs\imgen\public_html\public_html\test_output\test_flip-in.mp4 (7.25 MB)
+
+Testing Animation: flip-vertical
+SUCCESS: D:\xamp\htdocs\imgen\public_html\public_html\test_output\test_flip-vertical.mp4 (7.28 MB)
+
+Testing Animation: bounce-drop
+SUCCESS: D:\xamp\htdocs\imgen\public_html\public_html\test_output\test_bounce-drop.mp4 (7.21 MB)
+
+Testing Animation: bounce-slide
+SUCCESS: D:\xamp\htdocs\imgen\public_html\public_html\test_output\test_bounce-slide.mp4 (7.26 MB)
+
+Testing Animation: elastic-scale
+SUCCESS: D:\xamp\htdocs\imgen\public_html\public_html\test_output\test_elastic-scale.mp4 (7.30 MB)
+
+--- Test Complete ---

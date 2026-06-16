@@ -84,14 +84,11 @@
                                                 </td>
                                                 <td class="text-center align-middle bg-transparent border-bottom">
                                                     @if ($item->status == 0)
-                                                    <form method="POST" action="{{ url('/execute-video-task/' . $item->id) }}" style="display:inline;" onsubmit="this.querySelector('button').textContent='Executing...'; this.querySelector('button').disabled=true; return confirm('Execute this video generation task?');">
-                                                        @csrf
-                                                        <button type="submit" class="btn btn-sm btn-primary">Execute</button>
-                                                    </form>
+                                                    <button class="executeVideoBtn btn btn-sm btn-primary" data-id="{{ $item->id }}">Execute</button>
                                                     <button class="deleteVideoBtn btn btn-sm btn-danger" data-id="{{ $item->id }}">Delete</button>
                                                     @elseif ($item->status == 1)
                                                     <button class="viewVideosBtn btn btn-sm btn-info" data-id="{{ $item->id }}">View Videos</button>
-                                                    <a href="/download-task-videos/{{ $item->id }}" class="btn btn-sm btn-success">Download All</a>
+                                                    <a href="{{ route('download-task-videos', $item->id) }}" class="btn btn-sm btn-success">Download All</a>
                                                     @elseif ($item->status == 2)
                                                     <div class="progress-container" data-task-id="{{ $item->id }}">
                                                         <div class="progress" style="height: 10px;">
@@ -104,7 +101,7 @@
                                                                  id="progress-bar-{{ $item->id }}"></div>
                                                         </div>
                                                         <p class="text-xs mt-1 mb-0 text-center" id="progress-text-{{ $item->id }}">
-                                                            Running... (Wait)
+                                                            {{ $item->generated_count ?? 0 }} / {{ $item->totalvideos }} ({{ $item->percentage ?? 0 }}%)
                                                         </p>
                                                     </div>
                                                     @endif
@@ -155,7 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
             button.disabled = true;
             button.textContent = 'Processing...';
             
-            fetch('{{ url('/execute-video-task') }}/' + taskId, {
+            fetch(`{{ route('execute-video-task', '') }}/${taskId}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -221,32 +218,57 @@ function startTaskPolling() {
 }
 
 function pollTaskProgress(taskId) {
-    const interval = setInterval(() => {
-        fetch(`{{ url('/api/video-task-progress') }}/${taskId}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const progressBar = document.getElementById(`progress-bar-${taskId}`);
-                    const progressText = document.getElementById(`progress-text-${taskId}`);
-                    
-                    if (progressBar && progressText) {
-                        // Update Progress UI
-                        progressBar.style.width = `${data.percentage}%`;
-                        progressBar.setAttribute('aria-valuenow', data.percentage);
-                        progressText.textContent = `${data.percentage}% Completed (${data.generated}/${data.total})`;
-                        
-                        // If finished
-                        if (data.status == 1 || data.percentage >= 100) {
-                            clearInterval(interval);
-                            progressText.textContent = 'Completed! Reloading...';
-                            setTimeout(() => location.reload(), 1000);
-                        }
-                    }
-                }
-            })
-            .catch(error => console.error('Error polling task:', error));
-    }, 2000); // Poll every 2 seconds
+    // Not used anymore - using refreshTaskList instead
 }
+
+// Refresh task list via AJAX without full page reload
+function refreshTaskList() {
+    fetch(window.location.href, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.text())
+    .then(html => {
+        // Parse the HTML response
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Extract the task table body
+        const newTableBody = doc.querySelector('tbody');
+        const currentTableBody = document.querySelector('tbody');
+        
+        if (newTableBody && currentTableBody) {
+            // Update only the table body content
+            currentTableBody.innerHTML = newTableBody.innerHTML;
+            console.log('Task list updated');
+            
+            // Check if there are still processing tasks
+            const hasProcessingTasks = document.querySelectorAll('.progress-container').length > 0;
+            
+            if (hasProcessingTasks) {
+                // Continue polling
+                setTimeout(refreshTaskList, 5000); // Check every 5 seconds
+            } else {
+                console.log('All tasks completed, polling stopped');
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error refreshing task list:', error);
+        // Retry after 10 seconds on error
+        setTimeout(refreshTaskList, 10000);
+    });
+}
+
+// Start auto-refresh if there are any processing tasks on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const hasProcessingTasks = document.querySelectorAll('.progress-container').length > 0;
+    if (hasProcessingTasks) {
+        console.log('Processing tasks detected, starting AJAX refresh');
+        setTimeout(refreshTaskList, 5000); // Start after 5 seconds
+    }
+});
 
 // Toggle GPU Acceleration
 function toggleGPU() {

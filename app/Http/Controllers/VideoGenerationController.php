@@ -40,10 +40,12 @@ class VideoGenerationController extends Controller
 
             $templates = $query->orderBy('id', 'DESC')->paginate(50);
 
-            $templates->getCollection()->transform(function ($template) {
-                $template->formatted_date = \Carbon\Carbon::parse($template->created_at)->format('d-m-Y - H:i A');
-                return $template;
-            });
+            if ($templates->getCollection()) {
+                $templates->getCollection()->transform(function ($template) {
+                    $template->formatted_date = \Carbon\Carbon::parse($template->created_at)->format('d-m-Y - H:i A');
+                    return $template;
+                });
+            }
 
             return response()->json([
                 'data' => $templates->items(),
@@ -253,6 +255,7 @@ class VideoGenerationController extends Controller
                 ->first();
             
             $task->totalvideos = max($totalExpected, $generated->total ?? 0);
+            $task->generated_count = $generated->total ?? 0;
             $task->send = $generated->sent_count ?? 0;
             $task->pending = $generated->pending_count ?? 0;
             
@@ -315,238 +318,49 @@ class VideoGenerationController extends Controller
 
     public function executeVideoTask($id)
     {
-        // Close session to allow other requests to proceed while video generation runs
-        session_write_close();
-        
-        // Increase execution time limit for video processing
-        set_time_limit(3600); // 60 minutes for videos
-        ini_set('memory_limit', '4096M'); // 4GB for video processing
+        // Return immediately to avoid Cloudflare timeout
+        // All processing happens in background queue
         
         DB::beginTransaction();
 
         try {
             $task = Task::find($id);
 
-            if ($task && $task->status == 0) {
-                $task->status = 2; // Processing
-                $task->save();
-
-                $taskprocess = BeforeGenerate::where('taskid', $id)
-                    ->where('status', 1)
-                    ->where('content_type', 'video')
-                    ->get();
-
-                if ($taskprocess->isNotEmpty()) {
-                    // Collect all videos to generate in batches
-                    $videoBatch = [];
-                    $videoMetadata = []; // Store metadata for database insertion
-                    
-                    foreach ($taskprocess as $td) {
-                        $backgroundVideoPath = public_path('videos/background_video/' . $td->backgroundimage);
-
-                        if (!file_exists($backgroundVideoPath)) {
-                            \Log::error("Background video not found: {$backgroundVideoPath}");
-                            continue;
-                        }
-
-                        // Get customer templates assigned to this master template
-                        $frontTemplates = TemplatesByUser::where('master_template_id', $td->mastertemplateid)
-                            ->where('content_type', 'video')
-                            ->get();
-
-                        foreach ($frontTemplates as $fi) {
-                            try {
-                                // Customer template path (PNG overlay)
-                                $frontpath = public_path('img/user_template/' . $fi->customer_template);
-
-                                if (!file_exists($frontpath)) {
-                                    throw new \Exception("Customer template not found: {$frontpath}");
-                                }
-
-                                // Generate unique video filename
-                                $videoName = 'combined_video_' . time() . '_' . uniqid() . '.mp4';
-                                $outputPath = public_path('videos/generated_video/' . $videoName);
-
-                                // Ensure output directory exists
-                                $outputDir = dirname($outputPath);
-                                if (!file_exists($outputDir)) {
-                                    mkdir($outputDir, 0777, true);
-                                }
-
-                                // Add to batch
-                                $animationEffect = $td->animation_effect ?? 'wipe-in';
-                                $videoBatch[] = [
-                                    'bg_video' => $backgroundVideoPath,
-                                    'template' => $frontpath,
-                                    'output' => $outputPath,
-                                    'animation' => $animationEffect
-                                ];
-                                
-                                // Store metadata for later database insertion
-                                $videoMetadata[] = [
-                                    'customer_id' => $fi->customer_id,
-                                    'master_video_id' => $td->mastertemplateid,
-                                    'user_video_id' => $fi->id,
-                                    'taskid' => $id,
-                                    'beforeid' => $td->id,
-                                    'output_path' => $outputPath,
-                                    'video_name' => $videoName,
-                                    'thumbnail_name' => 'thumb_' . pathinfo($videoName, PATHINFO_FILENAME) . '.jpg',
-                                    'video_type' => $td->video_type ?? 'landscape'
-                                ];
-                                
-                            } catch (\Exception $e) {
-                                \Log::warning("Failed to prepare video for customer {$fi->customer_id}: " . $e->getMessage());
-                                
-                                $errorlog = new Errorlogs();
-                                $errorlog->task_id = $id;
-                                $errorlog->message = "Customer {$fi->customer_id}: " . $e->getMessage();
-                                $errorlog->save();
-                            }
-                        }
-
-                        BeforeGenerate::where('id', $td->id)->update(['status' => false]);
-                    }
-                    
-                // Dispatch videos to queue for PARALLEL processing!
-
-                    
-                    if (!empty($videoBatch)) {
-                         \Log::info("DEBUG: Entering Dispatch Block. Video Count: " . count($videoBatch));
-                         // Check GPU Status
-                         $settingsPath = storage_path('app/gpu_settings.json');
-                         $gpuEnabled = false;
-                         if (file_exists($settingsPath)) {
-                             $s = json_decode(file_get_contents($settingsPath), true);
-                             $gpuEnabled = $s['enabled'] ?? false;
-                         }
-                         
-                         if ($gpuEnabled) {
-                             // DIRECT GPU EXECUTION (Max Utilization, No Queue Overhead)
-                             \Log::info("🚀 GPU ENABLED: Starting Direct Parallel Execution");
-                             
-                             // Prepare Payload with Metadata
-                             $taskPayload = [];
-                             foreach ($videoBatch as $idx => $v) {
-                                 // Merge video paths with metadata needed for DB
-                                 $taskPayload[] = array_merge($v, [
-                                     'meta' => $videoMetadata[$idx]
-                                 ]);
-                             }
-                             
-                             // Save to JSON
-                             $jsonDir = storage_path('app/gpu_tasks');
-                             if (!file_exists($jsonDir)) mkdir($jsonDir, 0777, true);
-                              $jsonFile = $jsonDir . '/task_' . $id . '_' . time() . '.json';
-                              file_put_contents($jsonFile, json_encode($taskPayload));
-                              
-                              // Read JSON content to pass as string argument
-                              $jsonContent = file_get_contents($jsonFile);
-                              $jsonEscaped = addslashes($jsonContent);
-                              
-                              // Launch Manager Script
-                              $python = 'C:\\Users\\yuvra\\AppData\\Local\\Programs\\Python\\Python313\\python.exe';
-                              $script = base_path('parallel_video_generator.py');
-                              // Redirect output to log file
-                              $logFile = storage_path('logs/gpu_task_' . $id . '.log');
-                              $cmd = "start /B \"\" \"{$python}\" \"{$script}\" \"{$jsonEscaped}\" > \"{$logFile}\" 2>&1";
-                              
-                              pclose(popen("cmd /c {$cmd}", "r"));
-                              \Log::info("Launched GPU Manager: {$cmd}");
-                             
-                         } else {
-                             // CPU QUEUE EXECUTION (Standard)
-                             $videoCount = count($videoBatch);
-                             \Log::info("Dispatching {$videoCount} videos to queue for parallel processing...");
-                             
-                             foreach ($videoBatch as $index => $video) {
-                                 \App\Jobs\GenerateVideoCPUJob::dispatch(
-                                     $video,
-                                     $videoMetadata[$index]
-                                 )->onQueue('video_cpu');
-                             }
-                             \Log::info("✅ {$videoCount} video jobs dispatched to queue");
-                         }
-                    }
-                }
-
-                $ldate = date('Y-m-d H:i:s');
-
-                // After processing:
-                // Keep status as Processing (2) since jobs run in background
-                // No need to save again as status was set to 2 at start and not changed
-                
-                DB::commit();
-
-                // AUTO-START WORKERS: Launch python script in background (AFTER COMMIT to release locks)
-                // Only if using CPU queue (GPU mode launches its own direct process)
-                $settingsPath = storage_path('app/gpu_settings.json');
-                $gpuEnabled = false;
-                if (file_exists($settingsPath)) {
-                   $s = json_decode(file_get_contents($settingsPath), true);
-                   $gpuEnabled = $s['enabled'] ?? false;
-                }
-                
-                \Log::info("Generation Loop Complete. GPU Enabled: " . ($gpuEnabled ? 'YES' : 'NO') . ", Batch Size: " . count($videoBatch));
-
-                if (!empty($videoBatch) && !$gpuEnabled) {
-                    // Close session immediately so user doesn't wait
-                    session_write_close();
-                    
-                    try {
-                        $script = base_path('run_workers.py');
-                        $python = 'C:\\Users\\yuvra\\AppData\\Local\\Programs\\Python\\Python313\\python.exe';
-                        
-                        // Direct Python Launch as requested
-                        // "start /B" is standard Windows cmd to run in background
-                        // We use the absolute path to python verified earlier
-                        $cmd = "start /B \"\" \"{$python}\" \"{$script}\"";
-                        
-                        \Log::info("🚀 Launching workers directly: {$cmd}");
-                        
-                        pclose(popen("cmd /c {$cmd}", "r"));
-                        
-                    } catch (\Exception $e) {
-                        \Log::error("Failed to auto-start workers: " . $e->getMessage());
-                    }
-                }
-
-                $logs = new Logs();
-                $logs->task_id = $task->id;
-                $logs->status = 'success';
-                $logs->message = 'Videos generated successfully. Ready to send.';
-                $logs->save();
-
-                // Check if request expects JSON (AJAX) or HTML (form submission)
-                if (request()->expectsJson() || request()->ajax()) {
-                    return response()->json(['success' => true, 'message' => 'Task executed successfully.']);
-                } else {
-                    return redirect()->route('generate-videos')->with('success', 'Task executed successfully!');
-                }
-            } else {
-                if (request()->expectsJson() || request()->ajax()) {
-                    return response()->json(['success' => true, 'message' => 'Task executed already.']);
-                } else {
-                    return redirect()->route('generate-videos')->with('info', 'Task already executed.');
-                }
+            if (!$task) {
+                return response()->json(['success' => false, 'message' => 'Task not found'], 404);
             }
+
+            if ($task->status != 0) {
+                return response()->json(['success' => true, 'message' => 'Task already processing or completed']);
+            }
+
+            // Mark task as processing
+            $task->status = 2; // Processing
+            $task->save();
+
+            DB::commit();
+
+            // Dispatch task processing to queue (runs in background)
+            \App\Jobs\ProcessVideoTaskJob::dispatch($id)->onQueue('video_cpu');
+
+            // Auto-start workers if none running
+            $this->ensureWorkersRunning();
+
+            \Log::info("Task {$id} dispatched to queue for processing");
+
+            return response()->json([
+                'success' => true, 
+                'message' => 'Task queued for processing. Videos will be generated in background.'
+            ]);
+
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error("Failed to queue task {$id}: " . $e->getMessage());
             
-            \Log::error("VideoGenerationController Error: " . $e->getMessage());
-            file_put_contents(storage_path('logs/last_error.txt'), $e->getMessage() . "\n" . $e->getTraceAsString());
-            
-            $error = new Errorlogs();
-            $error->task_id = $id;
-            $error->message = $e->getMessage();
-            $error->save();
-
-            // Check if request expects JSON (AJAX) or HTML (form submission)
-            if (request()->expectsJson() || request()->ajax()) {
-                return response()->json(['success' => false, 'message' => 'Task execution failed.']);
-            } else {
-                return redirect()->route('generate-videos')->with('error', 'Task execution failed: ' . $e->getMessage());
-            }
+            return response()->json([
+                'success' => false, 
+                'message' => 'Failed to queue task: ' . $e->getMessage()
+            ], 500);
         }
     }
 
@@ -569,9 +383,19 @@ class VideoGenerationController extends Controller
 
             // Build the command - include animation effect as 4th parameter
             // Use full Python path since it's not in system PATH
-            $pythonPath = 'C:\\Users\\yuvra\\AppData\\Local\\Programs\\Python\\Python313\\python.exe';
+            $pythonPath = env('PYTHON_PATH', 'python');
+            
+            // Prepare environment variables for FFmpeg
+            $envPrefix = '';
+            $ffmpegPath = env('FFMPEG_PATH');
+            if ($ffmpegPath && file_exists($ffmpegPath)) {
+                $ffmpegDir = dirname($ffmpegPath);
+                $envPrefix = "set PATH={$ffmpegDir};%PATH% && set IMAGEIO_FFMPEG_EXE={$ffmpegPath} && ";
+            }
+
             $command = sprintf(
-                '"%s" "%s" "%s" "%s" "%s" "%s" 2>&1',
+                '%s"%s" "%s" "%s" "%s" "%s" "%s" 2>&1',
+                $envPrefix,
                 $pythonPath,
                 $pythonScript,
                 $bgVideo,
@@ -641,13 +465,33 @@ class VideoGenerationController extends Controller
             // Escape JSON for command line
             $escapedJson = str_replace('"', '\"', $jsonTasks);
             
-            // Check GPU acceleration setting from .env
-            $gpuEnabled = env('VIDEO_GPU_ACCELERATION', 'true') === 'true' ? '1' : '0';
+            // Prepare environment variables for FFmpeg
+            $envPrefix = '';
+            $ffmpegPath = env('FFMPEG_PATH');
+            if ($ffmpegPath && file_exists($ffmpegPath)) {
+                $ffmpegDir = dirname($ffmpegPath);
+                $envPrefix = "set PATH={$ffmpegDir};%PATH% && set IMAGEIO_FFMPEG_EXE={$ffmpegPath} && ";
+            }
+            
+            // Determine Python Path safely
+            $pythonPath = env('PYTHON_PATH', 'python');
+            
+            // Check if GPU is enabled from settings or env
+            $settingsPath = storage_path('app/gpu_settings.json');
+            $gpuEnabled = '1'; // Default
+            if (file_exists($settingsPath)) {
+                $settings = json_decode(file_get_contents($settingsPath), true);
+                $gpuEnabled = ($settings['enabled'] ?? true) ? '1' : '0';
+            } else {
+                $gpuEnabled = env('USE_GPU', '1');
+            }
             
             // Build command with GPU setting as environment variable
             $command = sprintf(
-                'set USE_GPU=%s && python "%s" "%s" 2>&1',
+                '%sset USE_GPU=%s && "%s" "%s" "%s" 2>&1',
+                $envPrefix,
                 $gpuEnabled,
+                $pythonPath,
                 $pythonScript,
                 $escapedJson
             );
@@ -813,6 +657,7 @@ class VideoGenerationController extends Controller
                 $beforeGeneration->content_type = 'video';
                 $beforeGeneration->video_type = $data->video_type ?? 'landscape';
                 $beforeGeneration->animation_effect = $data->animation_effect ?? 'wipe-in';
+                $beforeGeneration->rendering_engine = $data->rendering_engine ?? 'ffmpeg';
                 $beforeGeneration->status = 1;
                 $beforeGeneration->save();
             }
@@ -827,6 +672,9 @@ class VideoGenerationController extends Controller
 
             // Clear temp data for video content type only
             Tempstore::where('content_type', 'video')->delete();
+
+            // Note: Workers will auto-start when task is executed (not here)
+            // This keeps task creation instant
 
             return response()->json(['success' => true, 'task_name' => $task->taskname]);
         } catch (\Exception $e) {
@@ -896,13 +744,13 @@ class VideoGenerationController extends Controller
     {
         try {
             $task = Task::findOrFail($taskId);
-            $videos = GeneratedVideo::where('taskid', $taskId)->get();
+            $videos = GeneratedVideo::with('customer')->where('taskid', $taskId)->get();
             
             if ($videos->isEmpty()) {
-                return response()->json(['success' => false, 'message' => 'No videos found for this task'], 404);
+                return back()->with('error', 'No videos found for this task');
             }
             
-            $zipFileName = 'videos_' . $task->taskname . '_' . date('YmdHis') . '.zip';
+            $zipFileName = 'videos_task_' . $taskId . '_' . date('YmdHis') . '.zip';
             $zipPath = storage_path('app/temp/' . $zipFileName);
             
             // Create temp directory if it doesn't exist
@@ -913,19 +761,38 @@ class VideoGenerationController extends Controller
             $zip = new \ZipArchive();
             
             if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true) {
+                $addedCount = 0;
                 foreach ($videos as $video) {
-                    if (file_exists($video->generated_path)) {
-                        $customerName = $video->customer ? preg_replace('/[^A-Za-z0-9_\-]/', '_', $video->customer->name) : 'unknown';
-                        $fileName = $customerName . '_' . $video->generated_video;
-                        $zip->addFile($video->generated_path, $fileName);
+                    $videoPath = $video->generated_path ?? public_path('videos/generated_video/' . $video->generated_video);
+                    
+                    if (file_exists($videoPath)) {
+                        // Get customer name safely
+                        $customerName = 'customer_' . $video->customer_id;
+                        if ($video->customer && $video->customer->name) {
+                            $customerName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $video->customer->name);
+                        }
+                        
+                        $fileName = $customerName . '_' . basename($videoPath);
+                        $zip->addFile($videoPath, $fileName);
+                        $addedCount++;
+                    } else {
+                        \Log::warning("Video file not found: {$videoPath}");
                     }
                 }
                 $zip->close();
+                
+                if ($addedCount == 0) {
+                    return back()->with('error', 'No video files found on disk');
+                }
+                
+                \Log::info("Downloading ZIP with {$addedCount} videos for task {$taskId}");
+                return response()->download($zipPath, $zipFileName)->deleteFileAfterSend(true);
+            } else {
+                return back()->with('error', 'Failed to create ZIP file');
             }
-            
-            return response()->download($zipPath, $zipFileName)->deleteFileAfterSend(true);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            \Log::error("Download failed for task {$taskId}: " . $e->getMessage());
+            return back()->with('error', 'Download failed: ' . $e->getMessage());
         }
     }
 
@@ -944,7 +811,7 @@ class VideoGenerationController extends Controller
             }
             
             // Check hardware availability
-            $python = 'C:\\Users\\yuvra\\AppData\\Local\\Programs\\Python\\Python313\\python.exe';
+            $python = env('PYTHON_PATH', 'python');
             $script = base_path('video_generator.py');
             
             $cmd = "\"{$python}\" \"{$script}\" --check-gpu";
@@ -1002,21 +869,32 @@ class VideoGenerationController extends Controller
         try {
             $task = Task::find($id);
             if (!$task) {
-                return response()->json(['success' => false, 'message' => 'Task not found']);
+                \Log::warning("Task not found: {$id}");
+                return response()->json(['success' => false, 'message' => 'Task not found'], 404);
             }
             
             // Count expected videos
-            $totalExpected = DB::table('before_genration as bg')
-                ->leftJoin('templates_by_user as tu', function($join) {
-                    $join->on('bg.mastertemplateid', '=', 'tu.master_template_id')
-                         ->where('tu.content_type', '=', 'video');
-                })
-                ->where('bg.taskid', $task->id)
-                ->where('bg.content_type', 'video')
-                ->count('tu.id');
+            try {
+                $totalExpected = DB::table('before_genration as bg')
+                    ->leftJoin('templates_by_user as tu', function($join) {
+                        $join->on('bg.mastertemplateid', '=', 'tu.master_template_id')
+                             ->where('tu.content_type', '=', 'video');
+                    })
+                    ->where('bg.taskid', $task->id)
+                    ->where('bg.content_type', 'video')
+                    ->count('tu.id');
+            } catch (\Exception $e) {
+                \Log::error("Error counting expected videos for task {$id}: " . $e->getMessage());
+                $totalExpected = 0;
+            }
                 
             // Count generated videos
-            $generated = GeneratedVideo::where('taskid', $task->id)->count();
+            try {
+                $generated = GeneratedVideo::where('taskid', $task->id)->count();
+            } catch (\Exception $e) {
+                \Log::error("Error counting generated videos for task {$id}: " . $e->getMessage());
+                $generated = 0;
+            }
             
             // Calculate progress percentage
             $percentage = $totalExpected > 0 ? round(($generated / $totalExpected) * 100) : 0;
@@ -1032,7 +910,85 @@ class VideoGenerationController extends Controller
             ]);
             
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()]);
+            \Log::error("Error in getTaskProgress for task {$id}: " . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return response()->json([
+                'success' => false, 
+                'message' => 'Error retrieving task progress',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Auto-start queue workers if none are running
+     * This ensures workers are always available to process jobs
+     */
+    private function ensureWorkersRunning()
+    {
+        try {
+            // Check if workers are already running
+            if ($this->areWorkersRunning()) {
+                \Log::info('[Auto-Workers] Workers already running, skipping start');
+                return;
+            }
+
+            \Log::info('[Auto-Workers] No workers detected, starting workers...');
+
+            $basePath = base_path();
+            $pythonScript = $basePath . DIRECTORY_SEPARATOR . 'run_workers_persistent.py';
+
+            // Check if script exists
+            if (!file_exists($pythonScript)) {
+                \Log::error('[Auto-Workers] Worker script not found: ' . $pythonScript);
+                return;
+            }
+
+            // Start workers in background
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                // Windows
+                $command = 'start /B python "' . $pythonScript . '" > NUL 2>&1';
+                pclose(popen($command, 'r'));
+            } else {
+                // Linux/Mac
+                $command = 'python3 "' . $pythonScript . '" > /dev/null 2>&1 &';
+                exec($command);
+            }
+
+            \Log::info('[Auto-Workers] Workers started successfully');
+
+        } catch (\Exception $e) {
+            \Log::error('[Auto-Workers] Failed to start workers: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Check if queue workers are currently running
+     */
+    private function areWorkersRunning()
+    {
+        try {
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                // Windows: Check specifically for the python supervisor script
+                // 'wmic process where "CommandLine like \'%run_workers_persistent.py%\'" get ProcessId'
+                $command = 'wmic process where "CommandLine like \'%run_workers_persistent.py%\'" get ProcessId 2>&1';
+                exec($command, $output);
+                
+                // Filter out empty lines and error messages
+                $runningProcesses = array_filter($output, function($line) {
+                    return is_numeric(trim($line));
+                });
+                
+                return count($runningProcesses) > 0;
+            } else {
+                // Linux/Mac: Check for artisan queue:work processes
+                exec('ps aux | grep -c "queue:work"', $output);
+                $workerCount = isset($output[0]) ? (int)$output[0] : 0;
+                // Check if greater than 1 because grep itself counts as 1
+                return $workerCount > 1; 
+            }
+        } catch (\Exception $e) {
+            \Log::error('[Auto-Workers] Error checking worker status: ' . $e->getMessage());
+            return true; // Assume running on error to prevent fork bomb
         }
     }
 

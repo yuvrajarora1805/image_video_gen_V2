@@ -28,18 +28,37 @@ class TemplateByCustomerController extends Controller
     {
         if ($request->ajax()) {
             try {
-                $query = TemplatesByUser::select('templates_by_user.*');
+                $query = TemplatesByUser::select('templates_by_user.*')
+                    ->leftJoin('customers', 'templates_by_user.customer_id', '=', 'customers.id');
         
                 // Check if search query is present
                 if ($request->has('search') && $request->search != '') {
                     $search = $request->search;
                     $query->where(function($q) use ($search) {
-                        $q->where('customer_id', 'like', "%$search%")
-                          ->orWhere('master_template_id', 'like', "%$search%");
+                        // Search by customer name
+                        $q->where('customers.name', 'like', "%$search%")
+                          // Search by customer ID
+                          ->orWhere('templates_by_user.customer_id', 'like', "%$search%")
+                          // Search by master template ID
+                          ->orWhere('templates_by_user.master_template_id', 'like', "%$search%")
+                          // Search in templates table
+                          ->orWhereExists(function($subQuery) use ($search) {
+                              $subQuery->select(DB::raw(1))
+                                  ->from('templates')
+                                  ->whereColumn('templates.id', 'templates_by_user.master_template_id')
+                                  ->where('templates.name', 'like', "%$search%");
+                          })
+                          // Search in video_templates table
+                          ->orWhereExists(function($subQuery) use ($search) {
+                              $subQuery->select(DB::raw(1))
+                                  ->from('video_templates')
+                                  ->whereColumn('video_templates.id', 'templates_by_user.master_template_id')
+                                  ->where('video_templates.name', 'like', "%$search%");
+                          });
                     });
                 }
         
-                $templates = $query->orderBy('id', 'desc')->paginate(10);
+                $templates = $query->orderBy('templates_by_user.id', 'desc')->paginate(10);
                 
                 // Manually fetch related data to avoid memory issues
                 $data = [];

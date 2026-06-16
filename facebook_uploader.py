@@ -7,7 +7,7 @@ import argparse
 import logging
 import os
 
-GRAPH_API_VERSION = "v19.0"
+GRAPH_API_VERSION = "v25.0"
 BASE_URL = f"https://graph.facebook.com/{GRAPH_API_VERSION}"
 
 # Setup logging
@@ -42,14 +42,22 @@ def upload_facebook_reel(page_id, video_url, caption, access_token):
     
     log_print(f"[FB] Uploading reel to Facebook Page {page_id}...")
     
-    response = requests.post(url, data=payload)
-    response.raise_for_status()
-    
-    result = response.json()
-    video_id = result.get("id")
-    
-    log_print(f"[FB] Reel published successfully! Video ID: {video_id}")
-    return video_id
+    try:
+        response = requests.post(url, data=payload)
+        response.raise_for_status()
+        
+        result = response.json()
+        video_id = result.get("id")
+        
+        log_print(f"[FB] Reel published successfully! Video ID: {video_id}")
+        return video_id
+    except requests.exceptions.HTTPError as e:
+        error_msg = f"HTTP Error: {e.response.status_code} - {e.response.text}"
+        log_print(f"[ERROR] Facebook API Error: {error_msg}", "error")
+        raise Exception(error_msg)
+    except Exception as e:
+        log_print(f"[ERROR] FB Upload Error: {str(e)}", "error")
+        raise e
 
 
 def update_laravel_status(callback_url, log_id, status, video_id=None, error=None):
